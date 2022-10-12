@@ -1,5 +1,6 @@
 import os
 import torch
+import numpy as np
 import random
 import torchvision.transforms as transforms
 from PIL import Image
@@ -68,3 +69,9 @@ def tensor_to_numpy(tensor):
     img = tensor.mul(255).to(torch.uint8)
     img = img.numpy().transpose(1, 2, 0)
     return img
+
+
+def min_max_scaling(x, size=256):
+    x = x - torch.min(x)
+    x = x / torch.max(x)
+    return x

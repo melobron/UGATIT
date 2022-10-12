@@ -39,9 +39,17 @@ opt = parser.parse_args()
 
 
 def reverse(args, tensor):
-    reverse_transform = transforms.Compose([
-        transforms.Normalize(mean=[-m / s for m, s in zip(args.mean, args.std)], std=[1 / s for s in args.std])
-    ])
+    c = tensor.shape[1]
+    if c == 1:
+        reverse_transform = transforms.Compose([
+            transforms.Normalize(mean=-1.0, std=2)
+        ])
+    elif c == 3:
+        reverse_transform = transforms.Compose([
+            transforms.Normalize(mean=[-m / s for m, s in zip(args.mean, args.std)], std=[1 / s for s in args.std])
+        ])
+    else:
+        raise NotImplementedError('wrong channel size')
 
     out = reverse_transform(tensor)
     out = torch.squeeze(out, dim=0)
@@ -96,20 +104,25 @@ def Test_UGATIT(args):
             real_A = real_A.to(device)
             real_A = torch.unsqueeze(real_A, dim=0)
 
-            fake_A2B, fake_A2B_cam, fake_A2B_heatmap = netG_A2B(real_A)
-            fake_A2B2A, fake_A2B2A_cam, fake_A2B2A_heatmap = netG_B2A(fake_A2B)
-            fake_A2A, fake_A2A_cam, fake_A2A_heatmap = netG_B2A(real_A)
+            fake_A2B, _, fake_A2B_heatmap = netG_A2B(real_A)
+            fake_A2B2A, _, fake_A2B2A_heatmap = netG_B2A(fake_A2B)
+            fake_A2A, _, fake_A2A_heatmap = netG_B2A(real_A)
 
-            A2B_data = torch.cat([fake_A2B, fake_A2B_cam, fake_A2B_heatmap], dim=3)
-            A2B2A_data = torch.cat([fake_A2B2A, fake_A2B2A_cam, fake_A2B2A_heatmap], dim=3)
-            A2A_data = torch.cat([fake_A2A, fake_A2A_cam, fake_A2A_heatmap], dim=3)
+            fake_A2B_heatmap = min_max_scaling(fake_A2B_heatmap)
+            fake_A2B2A_heatmap = min_max_scaling(fake_A2B2A_heatmap)
+            fake_A2A_heatmap = min_max_scaling(fake_A2A_heatmap)
 
-            A2B_total_data = torch.cat([A2B_data, A2B2A_data, A2A_data], dim=2)
-            A2B_total_data = reverse(args, A2B_total_data)
+            fake_imgs = torch.cat([fake_A2B, fake_A2B2A, fake_A2A], dim=3)
+            fake_heatmaps = torch.cat([fake_A2B_heatmap, fake_A2B2A_heatmap, fake_A2A_heatmap], dim=3)
+
+            fake_imgs = reverse(args, fake_imgs)
+            fake_heatmaps = reverse(args, fake_heatmaps)
+
             fake_A2B = reverse(args, fake_A2B)
 
-            if index < 10:
-                cv2.imwrite(os.path.join(AtoB_dir, '{}.png'.format(index+1)), A2B_total_data)
+            if index < 5:
+                cv2.imwrite(os.path.join(AtoB_dir, 'fake{}.png'.format(index+1)), fake_imgs)
+                cv2.imwrite(os.path.join(AtoB_dir, 'heatmap{}.png'.format(index+1)), fake_heatmaps)
             if index < args.test_size:
                 cv2.imwrite(os.path.join(fakeB_dir, '{}.png'.format(index + 1)), fake_A2B)
             else:
@@ -121,22 +134,27 @@ def Test_UGATIT(args):
             real_B = real_B.to(device)
             real_B = torch.unsqueeze(real_B, dim=0)
 
-            fake_B2A, fake_B2A_cam, fake_B2A_heatmap = netG_B2A(real_B)
-            fake_B2A2B, fake_B2A2B_cam, fake_B2A2B_heatmap = netG_A2B(fake_B2A)
-            fake_B2B, fake_B2B_cam, fake_B2B_heatmap = netG_A2B(real_B)
+            fake_B2A, _, fake_B2A_heatmap = netG_B2A(real_B)
+            fake_B2A2B, _, fake_B2A2B_heatmap = netG_A2B(fake_B2A)
+            fake_B2B, _, fake_B2B_heatmap = netG_A2B(real_B)
 
-            B2A_data = torch.cat([fake_B2A, fake_B2A_cam, fake_B2A_heatmap], dim=3)
-            B2A2B_data = torch.cat([fake_B2A2B, fake_B2A2B_cam, fake_B2A2B_heatmap], dim=3)
-            B2B_data = torch.cat([fake_B2B, fake_B2B_cam, fake_B2B_heatmap], dim=3)
+            fake_A2B_heatmap = min_max_scaling(fake_A2B_heatmap)
+            fake_A2B2A_heatmap = min_max_scaling(fake_A2B2A_heatmap)
+            fake_A2A_heatmap = min_max_scaling(fake_A2A_heatmap)
 
-            B2A_total_data = torch.cat([B2A_data, B2A2B_data, B2B_data], dim=2)
-            B2A_total_data = reverse(args, B2A_total_data)
+            fake_imgs = torch.cat([fake_B2A, fake_B2A2B, fake_B2B], dim=3)
+            fake_heatmaps = torch.cat([fake_B2A_heatmap, fake_B2A2B_heatmap, fake_B2B_heatmap], dim=3)
+
+            fake_imgs = reverse(args, fake_imgs)
+            fake_heatmaps = reverse(args, fake_heatmaps)
+
             fake_B2A = reverse(args, fake_B2A)
 
-            if index < 10:
-                cv2.imwrite(os.path.join(BtoA_dir, '{}.png'.format(index+1)), B2A_total_data)
+            if index < 5:
+                cv2.imwrite(os.path.join(AtoB_dir, 'fake{}.png'.format(index+1)), fake_imgs)
+                cv2.imwrite(os.path.join(AtoB_dir, 'heatmap{}.png'.format(index+1)), fake_heatmaps)
             if index < args.test_size:
-                cv2.imwrite(os.path.join(fakeA_dir, '{}.png'.format(index + 1)), fake_B2A)
+                cv2.imwrite(os.path.join(fakeB_dir, '{}.png'.format(index + 1)), fake_B2A)
             else:
                 break
 
